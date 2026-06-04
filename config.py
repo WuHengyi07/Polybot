@@ -171,6 +171,9 @@ class Config:
     log_level: str = "INFO"
     emergency_stop_file: str = "EMERGENCY_STOP"
     alert_webhook_url: str = ""  # Discord/Slack webhook for unattended alerts
+    # Comma list of event categories pushed to ALERT_WEBHOOK_URL. Subset of:
+    # fills, summary, settlement, errors. Empty/unset = all four.
+    notify_events: str = "fills,summary,settlement,errors"
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -252,9 +255,15 @@ class Config:
             db_path=g("DB_PATH", "prediction_market_bot.db"),
             log_level=g("LOG_LEVEL", "INFO").upper(),
             alert_webhook_url=g("ALERT_WEBHOOK_URL", "") or "",
+            notify_events=g("NOTIFY_EVENTS", "fills,summary,settlement,errors") or "fills,summary,settlement,errors",
         )
 
     # ------------------------------------------------------------------ #
+    def notify_enabled(self, event: str) -> bool:
+        """True if `event` (fills|summary|settlement|errors) should be pushed."""
+        events = {e.strip().lower() for e in (self.notify_events or "").split(",") if e.strip()}
+        return (not events) or (event.lower() in events)
+
     def emergency_stop_engaged(self) -> bool:
         """True if the kill switch is set via env flag OR the STOP file exists."""
         if self.emergency_stop:

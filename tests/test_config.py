@@ -21,3 +21,22 @@ def test_values_without_comments_unchanged(monkeypatch):
     monkeypatch.setenv("DATA_SOURCE", "live")
     cfg = Config.from_env()
     assert cfg.openmeteo_models == "gfs025" and cfg.data_source == "live"
+
+
+def test_notify_events_default_and_helper(monkeypatch):
+    from config import Config
+    monkeypatch.delenv("NOTIFY_EVENTS", raising=False)
+    cfg = Config.from_env()
+    assert cfg.notify_enabled("fills")
+    assert cfg.notify_enabled("settlement")
+    assert cfg.notify_enabled("summary")
+    assert cfg.notify_enabled("errors")
+
+
+def test_notify_events_mutes_categories(monkeypatch):
+    from config import Config
+    monkeypatch.setenv("NOTIFY_EVENTS", "errors")
+    cfg = Config.from_env()
+    assert cfg.notify_enabled("errors")
+    assert not cfg.notify_enabled("fills")
+    assert not cfg.notify_enabled("summary")
