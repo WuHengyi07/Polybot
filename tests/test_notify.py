@@ -46,7 +46,7 @@ def test_format_daily_includes_gate_progress():
     assert "GATE: not yet" in msg
 
 
-def test_trade_fills_respects_event_gate_and_no_webhook(caplog):
+def test_trade_fills_respects_event_gate_and_no_webhook():
     posted = []
     n = Notifier(_cfg(events="summary"))  # fills muted, no webhook
     n._post = lambda text: posted.append(text)
@@ -60,3 +60,20 @@ def test_trade_fills_posts_when_enabled():
     n._post = lambda text: posted.append(text)
     n.trade_fills([({"ticker": "T", "side": "yes", "contracts": 1, "price": 0.5}, 0.1)])
     assert len(posted) == 1 and "1 new fill" in posted[0]
+
+
+def test_format_settlements_minimal_item_no_optional_fields():
+    msg = format_settlements([{"ticker": "X", "outcome_yes": 0}])
+    assert "X" in msg and "-> NO" in msg
+    assert "obs" not in msg and "model" not in msg
+    assert "realized this pass" not in msg
+
+
+def test_daily_summary_muted_when_summary_disabled():
+    from types import SimpleNamespace
+    posted = []
+    n = Notifier(_cfg(events="errors"))
+    n._post = lambda text: posted.append(text)
+    n.daily_summary(SimpleNamespace(mode="paper", equity=100.0, realized_pnl=0.0,
+                                    open_positions=0, drawdown=0.0))
+    assert posted == []

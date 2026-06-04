@@ -95,6 +95,7 @@ class Notifier:
 
     # -- events -------------------------------------------------------- #
     def alert(self, message: str) -> None:
+        # Gated on "errors": omitting "errors" from NOTIFY_EVENTS silences crash alerts.
         if not self._enabled("errors"):
             return
         self._post(f"🚨 prediction_market_bot ALERT: {message}")
