@@ -40,6 +40,9 @@ class Service:
         self.engine = ExecutionEngine(config)
         self.notifier = Notifier(config)
         self._last_daily = None
+        # Start the fill watermark at the current max trade id so the service never
+        # re-posts historical fills when it (re)starts.
+        self._last_trade_id = self.engine.db.max_trade_id()
 
     def run_forever(self, max_cycles: Optional[int] = None) -> None:
         log.info("Service starting: data_source=%s interval=%ss (max_cycles=%s)",
@@ -52,6 +55,7 @@ class Service:
             try:
                 result = self.engine.run_cycle()
                 self.notifier.heartbeat(result)
+                self._post_new_fills()
                 self._maybe_daily_tasks(result)
             except Exception as exc:  # crash recovery — never let one cycle kill the service
                 log.exception("Cycle crashed; recovering")
@@ -75,17 +79,47 @@ class Service:
             # Summarize AFTER settling so equity/PnL reflect the post-settle state (the
             # cycle `result` is pre-settle and was reporting stale, inconsistent equity).
             fresh = self.engine._summary(halted=False, markets_by_ticker={})
-            self.notifier.daily_summary(fresh)
+            from .live_gate import edge_proven
+            from .performance import compute_performance
+            perf = compute_performance(self.engine.db, self.config)
+            gate = edge_proven(self.engine.db, self.config)
+            self.notifier.daily_summary(fresh, perf=perf, gate=gate)
         except Exception as exc:  # pragma: no cover
             log.warning("Daily tasks failed: %s", exc)
             self.notifier.alert(f"daily tasks failed: {exc}")
 
+    def _post_new_fills(self) -> None:
+        """Post any opens recorded since the last watermark, as one batched message."""
+        db = self.engine.db
+        new = db.trades_since(self._last_trade_id, action="open")
+        if not new:
+            return
+        fills = []
+        for t in new:
+            sig = db.latest_signal(t["ticker"])
+            edge = float(sig["edge"]) if sig and sig.get("edge") is not None else None
+            fills.append((t, edge))
+        self.notifier.trade_fills(fills)
+        self._last_trade_id = db.max_trade_id()
+
     def _settle(self) -> None:
+        from .performance import compute_performance
         from .scorer import run_settlement_pass
         e = self.engine
+        before = compute_performance(e.db, self.config).realized_pnl
         source = build_settlement_source(self.config, e.market_client, e.weather)
         resolved = run_settlement_pass(e.db, e.pm, e.paper, source)
         log.info("Daily settlement: resolved %d position(s)", len(resolved))
+        if not resolved:
+            return
+        after = compute_performance(e.db, self.config).realized_pnl
+        by_ticker = {s["ticker"]: s for s in e.db.get_settlements()}
+        items = []
+        for ticker, side, _outcome in resolved:
+            row = dict(by_ticker.get(ticker, {"ticker": ticker}))
+            row["side"] = side
+            items.append(row)
+        self.notifier.settlement_results(items, realized_delta=round(after - before, 2))
 
     def _calibrate(self) -> None:
         from .calibration_trainer import load_calibrators, train_from_db
