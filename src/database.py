@@ -179,6 +179,21 @@ class Database:
     def recent_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
         return self.query("SELECT * FROM trades ORDER BY id DESC LIMIT ?", (limit,))
 
+    def trades_since(self, last_id: int, action: str = "open") -> List[Dict[str, Any]]:
+        """Trades with id > last_id for the given action, oldest first (for fill diffs)."""
+        return self.query(
+            "SELECT * FROM trades WHERE id > ? AND action = ? ORDER BY id",
+            (last_id, action))
+
+    def max_trade_id(self) -> int:
+        rows = self.query("SELECT MAX(id) AS m FROM trades")
+        return int(rows[0]["m"]) if rows and rows[0]["m"] is not None else 0
+
+    def latest_signal(self, ticker: str) -> Optional[Dict[str, Any]]:
+        rows = self.query(
+            "SELECT * FROM signals WHERE ticker=? ORDER BY id DESC LIMIT 1", (ticker,))
+        return rows[0] if rows else None
+
     def open_positions(self) -> List[Dict[str, Any]]:
         return self.query("SELECT * FROM positions WHERE status = 'open' ORDER BY ticker")
 
