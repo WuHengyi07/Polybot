@@ -75,3 +75,28 @@ def test_service_does_not_post_historical_fills_on_startup(tmp_path):
     svc = Service(cfg)
     # Watermark must start at the pre-existing max id, so OLD is never posted.
     assert svc._last_trade_id >= 1
+
+
+def test_post_new_fills_posts_and_advances_watermark(tmp_path):
+    import dataclasses
+    from config import Config
+    from src.service import Service
+
+    cfg = dataclasses.replace(Config.from_env(), data_source="mock",
+                              db_path=str(tmp_path / "fills.db"),
+                              loop_interval_seconds=0,
+                              notify_events="fills,summary,settlement,errors")
+    svc = Service(cfg)
+    posted = []
+    svc.notifier._post = lambda text: posted.append(text)
+
+    # Seed an open trade AFTER the watermark was captured in __init__.
+    svc.engine.db.record_trade({"ticker": "NEW", "side": "yes", "action": "open",
+                                "price": 0.4, "contracts": 1, "fee": 0.0,
+                                "cash_flow": -0.4, "mode": "paper", "position_id": "NEW:yes"})
+
+    svc._post_new_fills()
+
+    assert any("new fill" in p for p in posted)
+    assert any("NEW YES x1 @ 0.40" in p for p in posted)
+    assert svc._last_trade_id == svc.engine.db.max_trade_id()
