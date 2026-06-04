@@ -40,3 +40,11 @@ def test_notify_events_mutes_categories(monkeypatch):
     assert cfg.notify_enabled("errors")
     assert not cfg.notify_enabled("fills")
     assert not cfg.notify_enabled("summary")
+
+
+def test_notify_events_empty_string_means_all(monkeypatch):
+    from config import Config
+    monkeypatch.setenv("NOTIFY_EVENTS", "")
+    cfg = Config.from_env()
+    assert cfg.notify_enabled("fills")
+    assert cfg.notify_enabled("errors")

@@ -20,6 +20,9 @@ except Exception:  # pragma: no cover
         return False
 
 
+_DEFAULT_NOTIFY_EVENTS = "fills,summary,settlement,errors"
+
+
 def _strip_inline_comment(value):
     """Drop an accidental inline ' #...' comment (and surrounding whitespace) from an env
     value. python-dotenv versions differ on stripping these, and copying .env.example with
@@ -173,7 +176,7 @@ class Config:
     alert_webhook_url: str = ""  # Discord/Slack webhook for unattended alerts
     # Comma list of event categories pushed to ALERT_WEBHOOK_URL. Subset of:
     # fills, summary, settlement, errors. Empty/unset = all four.
-    notify_events: str = "fills,summary,settlement,errors"
+    notify_events: str = _DEFAULT_NOTIFY_EVENTS
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -255,7 +258,7 @@ class Config:
             db_path=g("DB_PATH", "prediction_market_bot.db"),
             log_level=g("LOG_LEVEL", "INFO").upper(),
             alert_webhook_url=g("ALERT_WEBHOOK_URL", "") or "",
-            notify_events=g("NOTIFY_EVENTS", "fills,summary,settlement,errors") or "fills,summary,settlement,errors",
+            notify_events=g("NOTIFY_EVENTS", _DEFAULT_NOTIFY_EVENTS) or _DEFAULT_NOTIFY_EVENTS,
         )
 
     # ------------------------------------------------------------------ #
