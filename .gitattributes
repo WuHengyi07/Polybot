@@ -1,0 +1,5 @@
+# Linux deploy artifacts must keep LF endings regardless of OS that edits them.
+*.service text eol=lf
+*.sh text eol=lf
+deploy/.env.* text eol=lf
+deploy/Dockerfile text eol=lf
