@@ -1,0 +1,89 @@
+{
+  "_comment": "Mock Kalshi-style daily-high-temperature markets for 2026-06-03. Prices in dollars (0-1). no_bid/no_ask are the complementary NO book (no_bid = 1 - yes_ask). Seeded to exercise every signal path against data/mock_weather.json.",
+  "markets": [
+    {
+      "market_id": "KXHIGHNY-26JUN03-T80",
+      "ticker": "KXHIGHNY-26JUN03-T80",
+      "title": "Will the high temp in NYC be >80° on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.86, "yes_ask": 0.88, "no_bid": 0.12, "no_ask": 0.14,
+      "volume": 2000, "open_interest": 5400,
+      "close_time": "2026-06-04T03:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if the NWS Daily Climate Report high temperature for NYC (Central Park / KNYC) is greater than 80 F.",
+      "settlement_source": "NWS Daily Climate Report - NYC Central Park (KNYC)",
+      "order_book": {"yes_bids": [[0.86, 600], [0.85, 900]], "yes_asks": [[0.88, 700], [0.89, 1100]], "no_bids": [[0.12, 700], [0.11, 1100]], "no_asks": [[0.14, 600], [0.15, 900]]}
+    },
+    {
+      "market_id": "KXHIGHNY-26JUN03-T83",
+      "ticker": "KXHIGHNY-26JUN03-T83",
+      "title": "Will the high temp in NYC be >83° on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.40, "yes_ask": 0.42, "no_bid": 0.58, "no_ask": 0.60,
+      "volume": 1500, "open_interest": 4200,
+      "close_time": "2026-06-04T03:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if the NWS Daily Climate Report high temperature for NYC (Central Park / KNYC) is greater than 83 F.",
+      "settlement_source": "NWS Daily Climate Report - NYC Central Park (KNYC)",
+      "order_book": {"yes_bids": [[0.40, 500], [0.39, 700]], "yes_asks": [[0.42, 500], [0.43, 800]], "no_bids": [[0.58, 500], [0.57, 800]], "no_asks": [[0.60, 500], [0.61, 700]]}
+    },
+    {
+      "market_id": "KXHIGHNY-26JUN03-T86",
+      "ticker": "KXHIGHNY-26JUN03-T86",
+      "title": "Will the high temp in NYC be >86° on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.36, "yes_ask": 0.38, "no_bid": 0.62, "no_ask": 0.64,
+      "volume": 800, "open_interest": 2600,
+      "close_time": "2026-06-04T03:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if the NWS Daily Climate Report high temperature for NYC (Central Park / KNYC) is greater than 86 F.",
+      "settlement_source": "NWS Daily Climate Report - NYC Central Park (KNYC)",
+      "order_book": {"yes_bids": [[0.36, 400], [0.35, 600]], "yes_asks": [[0.38, 400], [0.39, 700]], "no_bids": [[0.62, 400], [0.61, 700]], "no_asks": [[0.64, 400], [0.65, 600]]}
+    },
+    {
+      "market_id": "KXHIGHNY-26JUN03-T89",
+      "ticker": "KXHIGHNY-26JUN03-T89",
+      "title": "Will the high temp in NYC be >89° on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.04, "yes_ask": 0.07, "no_bid": 0.93, "no_ask": 0.96,
+      "volume": 40, "open_interest": 150,
+      "close_time": "2026-06-04T03:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if the NWS Daily Climate Report high temperature for NYC (Central Park / KNYC) is greater than 89 F.",
+      "settlement_source": "NWS Daily Climate Report - NYC Central Park (KNYC)",
+      "order_book": {"yes_bids": [[0.04, 50], [0.03, 80]], "yes_asks": [[0.07, 40], [0.09, 60]], "no_bids": [[0.93, 40], [0.91, 60]], "no_asks": [[0.96, 50], [0.97, 80]]}
+    },
+    {
+      "market_id": "KXHIGHCHI-26JUN03-T85",
+      "ticker": "KXHIGHCHI-26JUN03-T85",
+      "title": "Will the high temp in Chicago be >85° on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.40, "yes_ask": 0.52, "no_bid": 0.48, "no_ask": 0.60,
+      "volume": 600, "open_interest": 1800,
+      "close_time": "2026-06-04T04:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if the NWS Daily Climate Report high temperature for Chicago (Midway / KMDW) is greater than 85 F.",
+      "settlement_source": "NWS Daily Climate Report - Chicago Midway (KMDW)",
+      "order_book": {"yes_bids": [[0.40, 300], [0.38, 500]], "yes_asks": [[0.52, 300], [0.54, 500]], "no_bids": [[0.48, 300], [0.46, 500]], "no_asks": [[0.60, 300], [0.62, 500]]}
+    },
+    {
+      "market_id": "KXHIGHCHI-26JUN03-T90",
+      "ticker": "KXHIGHCHI-26JUN03-T90",
+      "title": "Will the high temp in Chicago be >90° on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.18, "yes_ask": 0.20, "no_bid": 0.80, "no_ask": 0.82,
+      "volume": 950, "open_interest": 3100,
+      "close_time": "2026-06-04T04:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if the NWS Daily Climate Report high temperature for Chicago (Midway / KMDW) is greater than 90 F.",
+      "settlement_source": "NWS Daily Climate Report - Chicago Midway (KMDW)",
+      "order_book": {"yes_bids": [[0.18, 500], [0.17, 700]], "yes_asks": [[0.20, 500], [0.21, 700]], "no_bids": [[0.80, 500], [0.79, 700]], "no_asks": [[0.82, 500], [0.83, 700]]}
+    },
+    {
+      "market_id": "KXHOTDAY-26JUN03-NYC",
+      "ticker": "KXHOTDAY-26JUN03-NYC",
+      "title": "Will it be a hot day in NYC on Jun 3, 2026?",
+      "category": "weather",
+      "yes_bid": 0.48, "yes_ask": 0.52, "no_bid": 0.48, "no_ask": 0.52,
+      "volume": 700, "open_interest": 2000,
+      "close_time": "2026-06-04T03:59:00Z", "expiration_time": "2026-06-04T12:00:00Z",
+      "rules": "Settles YES if it is a hot day, as determined by the exchange.",
+      "settlement_source": "Exchange discretion",
+      "order_book": {"yes_bids": [[0.48, 400], [0.47, 600]], "yes_asks": [[0.52, 400], [0.53, 600]], "no_bids": [[0.48, 400], [0.47, 600]], "no_asks": [[0.52, 400], [0.53, 600]]}
+    }
+  ]
+}

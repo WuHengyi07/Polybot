@@ -1,0 +1,16 @@
+# Core runtime is pure standard library, so the bot + tests run with zero
+# third-party packages. The packages below unlock optional functionality.
+
+# --- Config loading (optional: env vars work without it) ---
+python-dotenv>=1.0.0
+
+# --- Live data + live trading (only needed when DATA_SOURCE=live or LIVE_TRADING=true) ---
+requests>=2.31.0
+cryptography>=42.0.0      # RSA-PSS request signing for the Kalshi private API
+
+# --- Dashboard (only needed to run src/dashboard.py) ---
+streamlit>=1.30.0
+pandas>=2.0.0
+
+# --- Tests / dev ---
+pytest>=7.4.0

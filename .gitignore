@@ -1,0 +1,15 @@
+# Secrets & local state — never commit
+.env
+*.pem
+EMERGENCY_STOP
+
+# Databases & logs
+*.db
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/

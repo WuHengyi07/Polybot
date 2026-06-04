@@ -1,0 +1,15 @@
+[Unit]
+Description=prediction_market_bot weather trading service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/prediction_market_bot
+EnvironmentFile=/opt/prediction_market_bot/.env
+ExecStart=/usr/bin/python3 main.py service
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
