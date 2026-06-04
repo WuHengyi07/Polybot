@@ -21,6 +21,19 @@ from .utils import get_logger, utcnow
 log = get_logger("service")
 
 
+def build_settlement_source(config, market_client, weather):
+    """Pick the settlement source by data source. CRITICAL: a real-data source
+    (live=Kalshi, polymarket) must use its REAL outcome source; ONLY the offline `mock`
+    source may settle against the model's own forecast. Mirrors scorer.settle_cli."""
+    from .settlement import (KalshiSettlementSource, MockSettlementSource,
+                             PolymarketSettlementSource, mock_outcomes_from_weather)
+    if config.data_source == "live":
+        return KalshiSettlementSource(config)
+    if config.data_source == "polymarket":
+        return PolymarketSettlementSource(config)
+    return MockSettlementSource(mock_outcomes_from_weather(market_client, weather))
+
+
 class Service:
     def __init__(self, config):
         self.config = config
@@ -59,20 +72,18 @@ class Service:
         try:
             self._settle()
             self._calibrate()
-            self.notifier.daily_summary(result)
+            # Summarize AFTER settling so equity/PnL reflect the post-settle state (the
+            # cycle `result` is pre-settle and was reporting stale, inconsistent equity).
+            fresh = self.engine._summary(halted=False, markets_by_ticker={})
+            self.notifier.daily_summary(fresh)
         except Exception as exc:  # pragma: no cover
             log.warning("Daily tasks failed: %s", exc)
             self.notifier.alert(f"daily tasks failed: {exc}")
 
     def _settle(self) -> None:
         from .scorer import run_settlement_pass
-        from .settlement import (KalshiSettlementSource, MockSettlementSource,
-                                 mock_outcomes_from_weather)
         e = self.engine
-        if self.config.data_source == "live":
-            source = KalshiSettlementSource(self.config)
-        else:
-            source = MockSettlementSource(mock_outcomes_from_weather(e.market_client, e.weather))
+        source = build_settlement_source(self.config, e.market_client, e.weather)
         resolved = run_settlement_pass(e.db, e.pm, e.paper, source)
         log.info("Daily settlement: resolved %d position(s)", len(resolved))
 

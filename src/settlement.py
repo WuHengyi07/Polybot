@@ -22,7 +22,7 @@ from datetime import date
 from typing import Dict, Optional
 
 from .market_parser import CITY_REGISTRY
-from .utils import get_logger, to_float
+from .utils import get_logger, to_float, utcnow
 
 log = get_logger("settlement")
 
@@ -78,6 +78,18 @@ def polymarket_outcome(market_json: dict) -> Optional[bool]:
     if yes <= 0.01:
         return False
     return None  # closed but not cleanly resolved (treat as not-yet-final)
+
+
+def _pm_ticker_date(ticker: str) -> Optional[date]:
+    """Target date from a Polymarket synthetic ticker PM-{CODE}-{YYYYMMDD}-{id}."""
+    m = re.match(r"PM-[A-Z]+-(\d{8})-", ticker.upper())
+    if not m:
+        return None
+    s = m.group(1)
+    try:
+        return date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+    except ValueError:
+        return None
 
 
 def _date_from_ticker(ticker: str) -> Optional[date]:
@@ -177,6 +189,11 @@ class PolymarketSettlementSource(SettlementSource):
                                       "User-Agent": "prediction_market_bot/1.0"})
 
     def resolve(self, ticker: str) -> Optional[SettlementResult]:
+        # A daily-temperature market for date D resolves the NEXT morning, so it can't be
+        # settled until today is past D. This guard is what stops "settling tomorrow today".
+        tdate = _pm_ticker_date(ticker)
+        if tdate is None or tdate >= utcnow().date():
+            return None
         market_id = ticker.rsplit("-", 1)[-1]  # PM-{CODE}-{YYYYMMDD}-{marketid}
         try:
             resp = self._session.get(f"{self.gamma_base}/markets/{market_id}", timeout=20)
