@@ -20,6 +20,17 @@ except Exception:  # pragma: no cover
         return False
 
 
+def _strip_inline_comment(value):
+    """Drop an accidental inline ' #...' comment (and surrounding whitespace) from an env
+    value. python-dotenv versions differ on stripping these, and copying .env.example with
+    trailing '# comment' on a value line otherwise leaks the comment into the value (it broke
+    the Open-Meteo model list + webhook URL live). Splits on ' #' (space-hash) only, so a
+    value legitimately containing '#' with no leading space is untouched."""
+    if value is None:
+        return None
+    return value.split(" #", 1)[0].strip()
+
+
 def _as_bool(value: str | bool, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
@@ -172,7 +183,8 @@ class Config:
             default_env = Path(__file__).with_name(".env")
             load_dotenv(default_env if default_env.exists() else None)
 
-        g = os.environ.get
+        # Read env vars with any accidental inline '# comment' stripped (see helper above).
+        g = lambda key, default=None: _strip_inline_comment(os.environ.get(key, default))  # noqa: E731
         cities = [c.strip().upper() for c in g("WEATHER_CITIES", "NYC,CHI").split(",") if c.strip()]
         return cls(
             data_source=g("DATA_SOURCE", "mock").strip().lower(),
