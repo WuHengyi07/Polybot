@@ -30,6 +30,19 @@ def test_trades_since_returns_only_newer_opens():
         os.remove(path)
 
 
+def test_max_trade_id_empty_and_populated():
+    db, path = _db()
+    try:
+        assert db.max_trade_id() == 0
+        last = db.record_trade({"ticker": "T1", "side": "yes", "action": "open",
+                                "price": 0.4, "contracts": 1, "fee": 0.0,
+                                "cash_flow": -0.4, "mode": "paper", "position_id": "T1:yes"})
+        assert db.max_trade_id() == last
+    finally:
+        db.close()
+        os.remove(path)
+
+
 def test_latest_signal_returns_most_recent():
     db, path = _db()
     try:

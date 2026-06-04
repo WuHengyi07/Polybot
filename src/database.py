@@ -182,7 +182,7 @@ class Database:
     def trades_since(self, last_id: int, action: str = "open") -> List[Dict[str, Any]]:
         """Trades with id > last_id for the given action, oldest first (for fill diffs)."""
         return self.query(
-            "SELECT * FROM trades WHERE id > ? AND action = ? ORDER BY id",
+            "SELECT * FROM trades WHERE id > ? AND action=? ORDER BY id",
             (last_id, action))
 
     def max_trade_id(self) -> int:
