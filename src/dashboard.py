@@ -78,6 +78,29 @@ else:
     st.info("No cycles recorded yet. Click 'Run one cycle'.")
 
 # --------------------------------------------------------------------------- #
+# Forward-test progress toward the edge-proven gate + notify status
+# --------------------------------------------------------------------------- #
+st.subheader("Forward-test progress (toward live)")
+from src.performance import compute_performance  # noqa: E402
+from src.live_gate import edge_proven  # noqa: E402
+
+perf = compute_performance(db, config)
+allowed, reason = edge_proven(db, config)
+g1, g2, g3, g4 = st.columns(4)
+g1.metric("Settled trades", f"{perf.n_settled}/{config.edge_proven_min_trades}")
+g2.metric("Win rate", f"{perf.win_rate*100:.1f}%")
+g3.metric("ROI", f"{perf.roi*100:+.1f}%")
+g4.metric("Edge vs market",
+          f"{perf.edge_vs_market:+.3f}" if perf.edge_vs_market is not None else "n/a")
+st.progress(min(1.0, perf.n_settled / max(1, config.edge_proven_min_trades)))
+(st.success if allowed else st.warning)(
+    f"Edge-proven gate: {'PROVEN' if allowed else 'NOT YET'} — {reason}")
+
+webhook_set = bool((config.alert_webhook_url or "").strip())
+st.caption(f"Discord push: {'configured' if webhook_set else 'not configured'} · "
+           f"events = {config.notify_events}")
+
+# --------------------------------------------------------------------------- #
 # Active markets (from the last cycle in this session)
 # --------------------------------------------------------------------------- #
 st.subheader("Active markets — last cycle")
