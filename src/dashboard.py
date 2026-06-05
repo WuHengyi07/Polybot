@@ -26,6 +26,19 @@ st.set_page_config(page_title="Prediction Market Bot", layout="wide")
 config = Config.from_env()
 db = Database(config.db_path)
 
+# Auto-reload the whole page every N seconds so an unattended dashboard reflects
+# the service's latest DB writes without a manual refresh. Dependency-free and
+# version-agnostic: a tiny script in a 0-height component reloads the parent page.
+# Set DASHBOARD_REFRESH_SECONDS=0 to disable.
+_refresh = getattr(config, "dashboard_refresh_seconds", 5)
+if _refresh and _refresh > 0:
+    from streamlit.components.v1 import html as _html
+    _html(
+        f"<script>setTimeout(function(){{window.parent.location.reload();}}, "
+        f"{int(_refresh) * 1000});</script>",
+        height=0,
+    )
+
 # --------------------------------------------------------------------------- #
 # Header: mode + safety
 # --------------------------------------------------------------------------- #

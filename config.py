@@ -177,6 +177,8 @@ class Config:
     # Comma list of event categories pushed to ALERT_WEBHOOK_URL. Subset of:
     # fills, summary, settlement, errors. Empty/unset = all four.
     notify_events: str = _DEFAULT_NOTIFY_EVENTS
+    # Streamlit dashboard auto-reload interval in seconds (0 = no auto-reload).
+    dashboard_refresh_seconds: int = 5
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -255,6 +257,7 @@ class Config:
             use_nbm_blend=_as_bool(g("USE_NBM_BLEND"), False),
             nbm_blend_weight=_as_float(g("NBM_BLEND_WEIGHT"), 0.5),
             loop_interval_seconds=_as_int(g("LOOP_INTERVAL_SECONDS"), 300),
+            dashboard_refresh_seconds=_as_int(g("DASHBOARD_REFRESH_SECONDS"), 5),
             db_path=g("DB_PATH", "prediction_market_bot.db"),
             log_level=g("LOG_LEVEL", "INFO").upper(),
             alert_webhook_url=g("ALERT_WEBHOOK_URL", "") or "",

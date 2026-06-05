@@ -16,6 +16,15 @@ def test_inline_comments_are_stripped_from_env_values(monkeypatch):
     assert cfg.data_source == "polymarket"
 
 
+def test_dashboard_refresh_seconds_default_and_override(monkeypatch):
+    monkeypatch.delenv("DASHBOARD_REFRESH_SECONDS", raising=False)
+    assert Config.from_env().dashboard_refresh_seconds == 5
+    monkeypatch.setenv("DASHBOARD_REFRESH_SECONDS", "0")
+    assert Config.from_env().dashboard_refresh_seconds == 0
+    monkeypatch.setenv("DASHBOARD_REFRESH_SECONDS", "10")
+    assert Config.from_env().dashboard_refresh_seconds == 10
+
+
 def test_values_without_comments_unchanged(monkeypatch):
     monkeypatch.setenv("OPENMETEO_MODELS", "gfs025")
     monkeypatch.setenv("DATA_SOURCE", "live")
