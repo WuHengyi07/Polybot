@@ -179,6 +179,9 @@ class Config:
     notify_events: str = _DEFAULT_NOTIFY_EVENTS
     # Streamlit dashboard auto-reload interval in seconds (0 = no auto-reload).
     dashboard_refresh_seconds: int = 5
+    # IANA timezone used to DISPLAY timestamps on the dashboard (storage stays UTC).
+    # e.g. America/New_York (US Eastern, auto EST/EDT), America/Chicago, UTC.
+    dashboard_timezone: str = "America/New_York"
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -258,6 +261,7 @@ class Config:
             nbm_blend_weight=_as_float(g("NBM_BLEND_WEIGHT"), 0.5),
             loop_interval_seconds=_as_int(g("LOOP_INTERVAL_SECONDS"), 300),
             dashboard_refresh_seconds=_as_int(g("DASHBOARD_REFRESH_SECONDS"), 5),
+            dashboard_timezone=g("DASHBOARD_TIMEZONE", "America/New_York") or "America/New_York",
             db_path=g("DB_PATH", "prediction_market_bot.db"),
             log_level=g("LOG_LEVEL", "INFO").upper(),
             alert_webhook_url=g("ALERT_WEBHOOK_URL", "") or "",

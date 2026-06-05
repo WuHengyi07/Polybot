@@ -25,6 +25,13 @@ def test_dashboard_refresh_seconds_default_and_override(monkeypatch):
     assert Config.from_env().dashboard_refresh_seconds == 10
 
 
+def test_dashboard_timezone_default_and_override(monkeypatch):
+    monkeypatch.delenv("DASHBOARD_TIMEZONE", raising=False)
+    assert Config.from_env().dashboard_timezone == "America/New_York"
+    monkeypatch.setenv("DASHBOARD_TIMEZONE", "UTC")
+    assert Config.from_env().dashboard_timezone == "UTC"
+
+
 def test_values_without_comments_unchanged(monkeypatch):
     monkeypatch.setenv("OPENMETEO_MODELS", "gfs025")
     monkeypatch.setenv("DATA_SOURCE", "live")

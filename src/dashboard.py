@@ -26,6 +26,23 @@ st.set_page_config(page_title="Prediction Market Bot", layout="wide")
 config = Config.from_env()
 db = Database(config.db_path)
 
+# Timestamps are STORED in UTC; convert to the configured zone for DISPLAY only.
+_DASH_TZ = getattr(config, "dashboard_timezone", "America/New_York") or "UTC"
+
+
+def _localize(df, cols):
+    """Render UTC ISO timestamp columns in `_DASH_TZ` (e.g. US Eastern). Display only."""
+    if df is None or getattr(df, "empty", True):
+        return df
+    for c in cols:
+        if c in df.columns:
+            try:
+                s = pd.to_datetime(df[c], utc=True, errors="coerce")
+                df[c] = s.dt.tz_convert(_DASH_TZ).dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+            except Exception:  # bad tz / unparseable -> leave the raw UTC value
+                pass
+    return df
+
 # Auto-reload the whole page every N seconds so an unattended dashboard reflects
 # the service's latest DB writes without a manual refresh. Dependency-free and
 # version-agnostic: a tiny script in a 0-height component reloads the parent page.
@@ -86,6 +103,7 @@ if pnl_rows:
     p5.metric("Open positions", int(latest["open_positions"]))
     df_pnl = pd.DataFrame(list(reversed(pnl_rows)))
     if not df_pnl.empty:
+        _localize(df_pnl, ["ts"])
         st.line_chart(df_pnl.set_index("ts")[["bankroll", "realized_pnl"]])
 else:
     st.info("No cycles recorded yet. Click 'Run one cycle'.")
@@ -134,12 +152,14 @@ left, right = st.columns(2)
 with left:
     st.subheader("Open positions")
     op = db.open_positions()
-    st.dataframe(pd.DataFrame(op) if op else pd.DataFrame(columns=["ticker"]),
+    st.dataframe(_localize(pd.DataFrame(op), ["opened_ts", "closed_ts"]) if op
+                 else pd.DataFrame(columns=["ticker"]),
                  use_container_width=True, hide_index=True)
 with right:
     st.subheader("Closed positions")
     cp = db.query("SELECT * FROM positions WHERE status='closed' ORDER BY id DESC LIMIT 100")
-    st.dataframe(pd.DataFrame(cp) if cp else pd.DataFrame(columns=["ticker"]),
+    st.dataframe(_localize(pd.DataFrame(cp), ["opened_ts", "closed_ts"]) if cp
+                 else pd.DataFrame(columns=["ticker"]),
                  use_container_width=True, hide_index=True)
 
 # --------------------------------------------------------------------------- #
@@ -147,13 +167,14 @@ with right:
 # --------------------------------------------------------------------------- #
 st.subheader("Trade history")
 trades = db.recent_trades(limit=200)
-st.dataframe(pd.DataFrame(trades) if trades else pd.DataFrame(columns=["ticker"]),
+st.dataframe(_localize(pd.DataFrame(trades), ["ts"]) if trades else pd.DataFrame(columns=["ticker"]),
              use_container_width=True, hide_index=True)
 
 st.subheader("Recent signals")
 sigs = db.recent_signals(limit=100)
-st.dataframe(pd.DataFrame(sigs) if sigs else pd.DataFrame(columns=["ticker"]),
+st.dataframe(_localize(pd.DataFrame(sigs), ["ts"]) if sigs else pd.DataFrame(columns=["ticker"]),
              use_container_width=True, hide_index=True)
 
-st.caption("Reddit PnL claims are NOT proof of edge. Paper-trade and verify "
+st.caption(f"Times shown in {_DASH_TZ} (stored in UTC). "
+           "Reddit PnL claims are NOT proof of edge — paper-trade and verify "
            "calibration on real settled outcomes before risking money.")
