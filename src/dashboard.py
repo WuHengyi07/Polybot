@@ -30,6 +30,15 @@ db = Database(config.db_path)
 _DASH_TZ = getattr(config, "dashboard_timezone", "America/New_York") or "UTC"
 
 
+def _fmt_ts(ts):
+    """Format a tz-aware Timestamp like 'Jun 4, 2026 10:24:21 PM EDT'. No leading zeros
+    on day/hour; platform-independent (avoids %-d/%-I, which fail on Windows)."""
+    hour12 = ts.hour % 12 or 12
+    ampm = "AM" if ts.hour < 12 else "PM"
+    return (f"{ts.strftime('%b')} {ts.day}, {ts.year} "
+            f"{hour12}:{ts.minute:02d}:{ts.second:02d} {ampm} {ts.strftime('%Z')}")
+
+
 def _localize(df, cols):
     """Render UTC ISO timestamp columns in `_DASH_TZ` (e.g. US Eastern). Display only."""
     if df is None or getattr(df, "empty", True):
@@ -37,8 +46,9 @@ def _localize(df, cols):
     for c in cols:
         if c in df.columns:
             try:
-                s = pd.to_datetime(df[c], utc=True, errors="coerce")
-                df[c] = s.dt.tz_convert(_DASH_TZ).dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                s = pd.to_datetime(df[c], utc=True, errors="coerce",
+                                   format="ISO8601").dt.tz_convert(_DASH_TZ)
+                df[c] = s.map(lambda x: _fmt_ts(x) if pd.notna(x) else "")
             except Exception:  # bad tz / unparseable -> leave the raw UTC value
                 pass
     return df
