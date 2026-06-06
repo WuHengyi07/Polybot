@@ -53,6 +53,34 @@ def _localize(df, cols):
                 pass
     return df
 
+
+def _realized_by_position(trades, starting_bankroll):
+    """Cumulative realized P&L per position_id, reconstructed from the trade log.
+
+    The positions table doesn't persist realized P&L when a position closes (the
+    close path only writes status/closed_ts), so the stored realized_pnl is 0 for
+    closed rows. We recompute it the same way performance.py does — from the trades.
+    """
+    from src.position_manager import PositionManager, position_id
+    pm = PositionManager(starting_bankroll)
+    out = {}
+    for t in trades:
+        a, tk, sd = t["action"], t["ticker"], t["side"]
+        c = int(t["contracts"]); pr = float(t["price"])
+        fee = float(t.get("fee") or 0.0); ts = t.get("ts", "")
+        tr = None
+        if a == "open":
+            pm.apply_open(tk, sd, c, pr, fee, "weather", ts)
+        elif a == "close":
+            tr = pm.apply_close(tk, sd, c, pr, fee, ts)
+        elif a == "settle":
+            tr = pm.apply_settle(tk, sd, outcome_yes=(pr >= 0.5), ts=ts)
+        if tr:
+            pid = position_id(tk, sd)
+            out[pid] = round(out.get(pid, 0.0) + tr["realized"], 4)
+    return out
+
+
 # Auto-reload the whole page every N seconds so an unattended dashboard reflects
 # the service's latest DB writes without a manual refresh. Dependency-free and
 # version-agnostic: a tiny script in a 0-height component reloads the parent page.
@@ -137,6 +165,15 @@ st.progress(min(1.0, perf.n_settled / max(1, config.edge_proven_min_trades)))
 (st.success if allowed else st.warning)(
     f"Edge-proven gate: {'PROVEN' if allowed else 'NOT YET'} — {reason}")
 
+# Closed-position activity (moves as positions close), shown alongside the strict
+# gate count. Early-closed positions have realized P&L but no outcome to score, so
+# they are NOT counted as "settled" — the gate stays honest.
+_n_closed = db.query("SELECT COUNT(*) c FROM positions WHERE status='closed'")[0]["c"]
+st.caption(
+    f"Closed positions so far: **{_n_closed}** · settled (count toward the gate): "
+    f"**{perf.n_settled}**. Positions the bot closes early have realized P&L but "
+    "aren't 'settled' (no weather outcome to score), so only true settlements move the gate.")
+
 webhook_set = bool((config.alert_webhook_url or "").strip())
 st.caption(f"Discord push: {'configured' if webhook_set else 'not configured'} · "
            f"events = {config.notify_events}")
@@ -168,9 +205,19 @@ with left:
 with right:
     st.subheader("Closed positions")
     cp = db.query("SELECT * FROM positions WHERE status='closed' ORDER BY id DESC LIMIT 100")
-    st.dataframe(_localize(pd.DataFrame(cp), ["opened_ts", "closed_ts"]) if cp
-                 else pd.DataFrame(columns=["ticker"]),
-                 use_container_width=True, hide_index=True)
+    if cp:
+        df_cp = pd.DataFrame(cp)
+        # The stored realized_pnl is 0 for closed rows (not persisted on close);
+        # recompute it from the trade log so it reflects each trade's real P&L.
+        _rmap = _realized_by_position(
+            db.query("SELECT * FROM trades WHERE mode='paper' ORDER BY id"),
+            config.starting_bankroll)
+        df_cp["realized_pnl"] = df_cp["position_id"].map(_rmap).fillna(df_cp["realized_pnl"])
+        _localize(df_cp, ["opened_ts", "closed_ts"])
+        st.dataframe(df_cp, use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(pd.DataFrame(columns=["ticker"]),
+                     use_container_width=True, hide_index=True)
 
 # --------------------------------------------------------------------------- #
 # Trade history + recent signals
