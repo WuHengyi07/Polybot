@@ -15,6 +15,7 @@ import sys
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
+import altair as alt  # noqa: E402
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
@@ -110,6 +111,33 @@ def _move_after_id(df, col):
     insert_at = cols.index("id") + 1 if "id" in cols else 0
     cols.insert(insert_at, col)
     return df[cols]
+
+
+def _color_by_pnl(col):
+    """Row-styler: green if row[col] > 0, red if < 0, neutral for 0 / blank / non-numeric."""
+    def _style(row):
+        try:
+            v = float(row.get(col))
+        except (TypeError, ValueError):
+            return [""] * len(row)
+        if v > 0:
+            bg = "background-color: rgba(0, 160, 0, 0.18)"
+        elif v < 0:
+            bg = "background-color: rgba(200, 0, 0, 0.18)"
+        else:
+            bg = ""
+        return [bg] * len(row)
+    return _style
+
+
+def _show_colored(df, color_fn):
+    """st.dataframe with row coloring; falls back to an uncolored table when the pandas
+    Styler can't load (jinja2<3 missing on the host) instead of crashing the page."""
+    try:
+        st.dataframe(df.style.apply(color_fn, axis=1),
+                     use_container_width=True, hide_index=True)
+    except Exception:
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def _closed_stats(paper_trades, closed_pids, starting_bankroll):
@@ -213,7 +241,19 @@ if pnl_rows:
         _series = st.radio("Series", ["Bankroll", "Realized P&L"], index=0, horizontal=True,
                            key="pnl_series", label_visibility="collapsed")
         _col = "bankroll" if _series == "Bankroll" else "realized_pnl"
-        st.line_chart(_plot.set_index("t")[[_col]])
+        # Zoom the y-axis to the data range (zero=False) so the line fills the space
+        # instead of being squashed against a 0-based axis.
+        _chart = (
+            alt.Chart(_plot.reset_index())
+            .mark_line()
+            .encode(
+                x=alt.X("t:T", title=None),
+                y=alt.Y(f"{_col}:Q", title=_series, scale=alt.Scale(zero=False, nice=True)),
+                tooltip=[alt.Tooltip("t:T", title="time"), alt.Tooltip(f"{_col}:Q", title=_series)],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(_chart, use_container_width=True)
 else:
     st.info("No cycles recorded yet. Click 'Run one cycle'.")
 
@@ -276,7 +316,7 @@ with left:
         df_op["unrealized_pnl"] = df_op.apply(lambda r: _unrealized(r, prices), axis=1)
         df_op = _move_after_id(df_op, "unrealized_pnl")
         _localize(df_op, ["opened_ts", "closed_ts"])
-        st.dataframe(df_op, use_container_width=True, hide_index=True)
+        _show_colored(df_op, _color_by_pnl("unrealized_pnl"))
     else:
         st.dataframe(pd.DataFrame(columns=["ticker"]),
                      use_container_width=True, hide_index=True)
@@ -290,7 +330,7 @@ with right:
         df_cp["realized_pnl"] = df_cp["position_id"].map(_cs["realized_map"]).fillna(df_cp["realized_pnl"])
         df_cp = _move_after_id(df_cp, "realized_pnl")
         _localize(df_cp, ["opened_ts", "closed_ts"])
-        st.dataframe(df_cp, use_container_width=True, hide_index=True)
+        _show_colored(df_cp, _color_by_pnl("realized_pnl"))
     else:
         st.dataframe(pd.DataFrame(columns=["ticker"]),
                      use_container_width=True, hide_index=True)
