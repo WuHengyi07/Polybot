@@ -313,8 +313,14 @@ if trades:
             bg = ""
         return [bg] * len(row)
 
-    st.dataframe(df_tr.style.apply(_color_trade, axis=1),
-                 use_container_width=True, hide_index=True)
+    try:
+        st.dataframe(df_tr.style.apply(_color_trade, axis=1),
+                     use_container_width=True, hide_index=True)
+    except Exception:
+        # Row coloring needs jinja2>=3 (pandas Styler). If it's missing/old, fall back
+        # to an uncolored table instead of crashing the whole page.
+        st.caption("⚠️ Row colors need jinja2>=3 — run: pip install --user --upgrade 'jinja2>=3'")
+        st.dataframe(df_tr, use_container_width=True, hide_index=True)
 else:
     st.dataframe(pd.DataFrame(columns=["ticker"]),
                  use_container_width=True, hide_index=True)
