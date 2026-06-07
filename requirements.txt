@@ -11,6 +11,7 @@ cryptography>=42.0.0      # RSA-PSS request signing for the Kalshi private API
 # --- Dashboard (only needed to run src/dashboard.py) ---
 streamlit>=1.37.0
 pandas>=2.0.0
+jinja2>=3.0.0        # pandas Styler (trade-history row coloring) requires it
 
 # --- Tests / dev ---
 pytest>=7.4.0
