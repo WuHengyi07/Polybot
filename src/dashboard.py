@@ -81,6 +81,37 @@ def _realized_by_position(trades, starting_bankroll):
     return out
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _live_prices():
+    """{ticker: (yes_bid, no_bid)} from the live exchange, cached 60s to limit API load.
+    Used to mark open positions to market for unrealized P&L. Empty dict on any error."""
+    try:
+        from src.market_client import build_market_client
+        client = build_market_client(config)
+        return {m.ticker: (float(m.yes_bid), float(m.no_bid)) for m in client.list_markets()}
+    except Exception:
+        return {}
+
+
+def _unrealized(row, prices):
+    """Mark an open position to market: contracts * (current_exit_price - avg_price)."""
+    px = prices.get(row["ticker"])
+    if not px:
+        return None
+    exit_price = px[0] if row["side"] == "yes" else px[1]  # sell yes@yes_bid, no@no_bid
+    return round(int(row["contracts"]) * (exit_price - float(row["avg_price"])), 4)
+
+
+def _move_after_id(df, col):
+    """Reorder so `col` is the second column, right after `id`."""
+    if col not in df.columns:
+        return df
+    cols = [c for c in df.columns if c != col]
+    insert_at = cols.index("id") + 1 if "id" in cols else 0
+    cols.insert(insert_at, col)
+    return df[cols]
+
+
 # Auto-reload the whole page every N seconds so an unattended dashboard reflects
 # the service's latest DB writes without a manual refresh. Dependency-free and
 # version-agnostic: a tiny script in a 0-height component reloads the parent page.
@@ -141,8 +172,19 @@ if pnl_rows:
     p5.metric("Open positions", int(latest["open_positions"]))
     df_pnl = pd.DataFrame(list(reversed(pnl_rows)))
     if not df_pnl.empty:
-        _localize(df_pnl, ["ts"])
-        st.line_chart(df_pnl.set_index("ts")[["bankroll", "realized_pnl"]])
+        # Real datetime axis in the dashboard tz (readable), with a range selector.
+        df_pnl["t"] = (pd.to_datetime(df_pnl["ts"], utc=True, errors="coerce",
+                                      format="ISO8601")
+                       .dt.tz_convert(_DASH_TZ).dt.tz_localize(None))
+        _ranges = {"1D": 1, "1W": 7, "1M": 30, "Max": None}
+        _pick = st.radio("Range", list(_ranges), index=3, horizontal=True,
+                         key="pnl_range", label_visibility="collapsed")
+        _days = _ranges[_pick]
+        _plot = df_pnl
+        if _days is not None:
+            _cutoff = df_pnl["t"].max() - pd.Timedelta(days=_days)
+            _plot = df_pnl[df_pnl["t"] >= _cutoff]
+        st.line_chart(_plot.set_index("t")[["bankroll", "realized_pnl"]])
 else:
     st.info("No cycles recorded yet. Click 'Run one cycle'.")
 
@@ -155,24 +197,20 @@ from src.live_gate import edge_proven  # noqa: E402
 
 perf = compute_performance(db, config)
 allowed, reason = edge_proven(db, config)
+_n_closed = db.query("SELECT COUNT(*) c FROM positions WHERE status='closed'")[0]["c"]
+_target = config.edge_proven_min_trades
 g1, g2, g3, g4 = st.columns(4)
-g1.metric("Settled trades", f"{perf.n_settled}/{config.edge_proven_min_trades}")
+# While testing: headline the closed-trade count (moves as positions close) instead
+# of settled. The real edge-proven gate still uses settled trades underneath.
+g1.metric("Closed trades", f"{_n_closed}/{_target}")
 g2.metric("Win rate", f"{perf.win_rate*100:.1f}%")
 g3.metric("ROI", f"{perf.roi*100:+.1f}%")
 g4.metric("Edge vs market",
           f"{perf.edge_vs_market:+.3f}" if perf.edge_vs_market is not None else "n/a")
-st.progress(min(1.0, perf.n_settled / max(1, config.edge_proven_min_trades)))
+st.progress(min(1.0, _n_closed / max(1, _target)))
 (st.success if allowed else st.warning)(
-    f"Edge-proven gate: {'PROVEN' if allowed else 'NOT YET'} — {reason}")
-
-# Closed-position activity (moves as positions close), shown alongside the strict
-# gate count. Early-closed positions have realized P&L but no outcome to score, so
-# they are NOT counted as "settled" — the gate stays honest.
-_n_closed = db.query("SELECT COUNT(*) c FROM positions WHERE status='closed'")[0]["c"]
-st.caption(
-    f"Closed positions so far: **{_n_closed}** · settled (count toward the gate): "
-    f"**{perf.n_settled}**. Positions the bot closes early have realized P&L but "
-    "aren't 'settled' (no weather outcome to score), so only true settlements move the gate.")
+    f"Edge-proven gate: {'PROVEN' if allowed else 'NOT YET'} — {reason} "
+    f"(settled: {perf.n_settled})")
 
 webhook_set = bool((config.alert_webhook_url or "").strip())
 st.caption(f"Discord push: {'configured' if webhook_set else 'not configured'} · "
@@ -199,9 +237,16 @@ left, right = st.columns(2)
 with left:
     st.subheader("Open positions")
     op = db.open_positions()
-    st.dataframe(_localize(pd.DataFrame(op), ["opened_ts", "closed_ts"]) if op
-                 else pd.DataFrame(columns=["ticker"]),
-                 use_container_width=True, hide_index=True)
+    if op:
+        df_op = pd.DataFrame(op)
+        prices = _live_prices()  # live marks (cached 60s); empty if the fetch fails
+        df_op["unrealized_pnl"] = df_op.apply(lambda r: _unrealized(r, prices), axis=1)
+        df_op = _move_after_id(df_op, "unrealized_pnl")
+        _localize(df_op, ["opened_ts", "closed_ts"])
+        st.dataframe(df_op, use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(pd.DataFrame(columns=["ticker"]),
+                     use_container_width=True, hide_index=True)
 with right:
     st.subheader("Closed positions")
     cp = db.query("SELECT * FROM positions WHERE status='closed' ORDER BY id DESC LIMIT 100")
@@ -213,6 +258,7 @@ with right:
             db.query("SELECT * FROM trades WHERE mode='paper' ORDER BY id"),
             config.starting_bankroll)
         df_cp["realized_pnl"] = df_cp["position_id"].map(_rmap).fillna(df_cp["realized_pnl"])
+        df_cp = _move_after_id(df_cp, "realized_pnl")
         _localize(df_cp, ["opened_ts", "closed_ts"])
         st.dataframe(df_cp, use_container_width=True, hide_index=True)
     else:
@@ -224,8 +270,24 @@ with right:
 # --------------------------------------------------------------------------- #
 st.subheader("Trade history")
 trades = db.recent_trades(limit=200)
-st.dataframe(_localize(pd.DataFrame(trades), ["ts"]) if trades else pd.DataFrame(columns=["ticker"]),
-             use_container_width=True, hide_index=True)
+if trades:
+    df_tr = _localize(pd.DataFrame(trades), ["ts"])
+
+    def _color_trade(row):
+        a = str(row.get("action", ""))
+        if a == "open":            # buy -> green
+            bg = "background-color: rgba(0, 160, 0, 0.18)"
+        elif a in ("close", "settle"):  # sell / resolve -> red
+            bg = "background-color: rgba(200, 0, 0, 0.18)"
+        else:
+            bg = ""
+        return [bg] * len(row)
+
+    st.dataframe(df_tr.style.apply(_color_trade, axis=1),
+                 use_container_width=True, hide_index=True)
+else:
+    st.dataframe(pd.DataFrame(columns=["ticker"]),
+                 use_container_width=True, hide_index=True)
 
 st.subheader("Recent signals")
 sigs = db.recent_signals(limit=100)
