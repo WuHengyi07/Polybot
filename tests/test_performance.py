@@ -1,8 +1,8 @@
 """Performance metrics: realized PnL, win rate, and the Brier-vs-market edge test."""
 from config import Config
 from src.database import Database
-from src.performance import (compute_performance, performance_by_segment,
-                             unprofitable_segments)
+from src.performance import (compute_closed_stats, compute_performance,
+                             performance_by_segment, unprofitable_segments)
 
 CFG = Config(starting_bankroll=100)
 
@@ -24,6 +24,28 @@ def _seed(db, n=4, model_p=0.9, market_p=0.5, win=True):
 def test_no_settlements_empty():
     perf = compute_performance(Database(":memory:"), CFG)
     assert perf.n_settled == 0
+
+
+def test_compute_closed_stats_counts_closed_positions():
+    db = Database(":memory:")
+    # winner A:yes +1.00 (open 5@0.40 -> close 5@0.60); loser B:no -0.40 (open 4@0.50 -> close 4@0.40)
+    db.record_trade({"ticker": "A", "side": "yes", "action": "open", "price": 0.40, "contracts": 5,
+                     "fee": 0.0, "cash_flow": -2.0, "mode": "paper", "position_id": "A:yes"})
+    db.record_trade({"ticker": "A", "side": "yes", "action": "close", "price": 0.60, "contracts": 5,
+                     "fee": 0.0, "cash_flow": 3.0, "mode": "paper", "position_id": "A:yes"})
+    db.record_trade({"ticker": "B", "side": "no", "action": "open", "price": 0.50, "contracts": 4,
+                     "fee": 0.0, "cash_flow": -2.0, "mode": "paper", "position_id": "B:no"})
+    db.record_trade({"ticker": "B", "side": "no", "action": "close", "price": 0.40, "contracts": 4,
+                     "fee": 0.0, "cash_flow": 1.6, "mode": "paper", "position_id": "B:no"})
+    for pid, tk, sd in [("A:yes", "A", "yes"), ("B:no", "B", "no")]:
+        db.upsert_position({"position_id": pid, "ticker": tk, "side": sd, "contracts": 0,
+                            "avg_price": 0.0, "status": "closed", "opened_ts": "", "closed_ts": "",
+                            "realized_pnl": 0.0, "mode": "paper"})
+    cs = compute_closed_stats(db, CFG)
+    assert cs.n == 2
+    assert abs(cs.win_rate - 0.5) < 1e-9
+    assert abs(cs.realized - 0.60) < 1e-9
+    assert abs(cs.roi - 0.15) < 1e-9  # 0.60 realized / 4.00 stake
 
 
 def test_wins_and_brier_edge():

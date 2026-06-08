@@ -33,17 +33,24 @@ def test_format_settlements_shows_outcome_and_model():
     assert "+2.35" in msg
 
 
-def test_format_daily_includes_gate_progress():
-    perf = SimpleNamespace(n_settled=112, win_rate=0.74, realized_pnl=8.4, roi=0.06,
-                           brier_model=0.09, brier_market=0.10, edge_vs_market=0.01)
-    msg = format_daily(SimpleNamespace(mode="paper", equity=108.4, realized_pnl=8.4,
-                                       open_positions=3, drawdown=0.02),
-                       perf=perf, gate=(False, "insufficient sample: 112/150 settled trades"),
-                       min_trades=150)
-    assert "112/150" in msg
-    assert "win 74.0%" in msg
-    assert "edge vs market +0.010" in msg
-    assert "GATE: not yet" in msg
+def test_format_daily_leads_with_closed_and_gate():
+    closed = SimpleNamespace(n=15, win_rate=0.533, roi=0.021, realized=2.54)
+    msg = format_daily(SimpleNamespace(mode="paper", equity=100.89, realized_pnl=2.54,
+                                       open_positions=5, drawdown=0.019),
+                       closed=closed,
+                       gate=(False, "insufficient sample: 0/150 settled trades"),
+                       target=150)
+    assert "closed 15/150" in msg
+    assert "win 53.3%" in msg
+    assert "roi +2.1%" in msg
+    assert "realized $+2.54" in msg
+    assert "GATE (real money): not yet" in msg
+
+
+def test_format_daily_without_closed_or_gate_is_just_base():
+    msg = format_daily(SimpleNamespace(mode="paper", equity=100.0, realized_pnl=0.0,
+                                       open_positions=0, drawdown=0.0))
+    assert "daily:" in msg and "closed" not in msg and "GATE" not in msg
 
 
 def test_trade_fills_respects_event_gate_and_no_webhook():

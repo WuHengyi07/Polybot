@@ -55,33 +55,6 @@ def _localize(df, cols):
     return df
 
 
-def _realized_by_position(trades, starting_bankroll):
-    """Cumulative realized P&L per position_id, reconstructed from the trade log.
-
-    The positions table doesn't persist realized P&L when a position closes (the
-    close path only writes status/closed_ts), so the stored realized_pnl is 0 for
-    closed rows. We recompute it the same way performance.py does — from the trades.
-    """
-    from src.position_manager import PositionManager, position_id
-    pm = PositionManager(starting_bankroll)
-    out = {}
-    for t in trades:
-        a, tk, sd = t["action"], t["ticker"], t["side"]
-        c = int(t["contracts"]); pr = float(t["price"])
-        fee = float(t.get("fee") or 0.0); ts = t.get("ts", "")
-        tr = None
-        if a == "open":
-            pm.apply_open(tk, sd, c, pr, fee, "weather", ts)
-        elif a == "close":
-            tr = pm.apply_close(tk, sd, c, pr, fee, ts)
-        elif a == "settle":
-            tr = pm.apply_settle(tk, sd, outcome_yes=(pr >= 0.5), ts=ts)
-        if tr:
-            pid = position_id(tk, sd)
-            out[pid] = round(out.get(pid, 0.0) + tr["realized"], 4)
-    return out
-
-
 @st.cache_data(ttl=60, show_spinner=False)
 def _live_prices():
     """{ticker: (yes_bid, no_bid)} from the live exchange, cached 60s to limit API load.
@@ -138,32 +111,6 @@ def _show_colored(df, color_fn):
                      use_container_width=True, hide_index=True)
     except Exception:
         st.dataframe(df, use_container_width=True, hide_index=True)
-
-
-def _closed_stats(paper_trades, closed_pids, starting_bankroll):
-    """Win-rate / ROI / realized over CLOSED positions (the testing-phase view).
-
-    Unlike performance.compute_performance (settled-only, for the gate), this counts
-    every closed position so the dashboard numbers move during testing. Returns the
-    realized-per-position map too, so the Closed-positions table can reuse it.
-    """
-    realized = _realized_by_position(paper_trades, starting_bankroll)
-    stake = {}
-    for t in paper_trades:
-        if t["action"] == "open":
-            pid = f'{t["ticker"]}:{t["side"]}'
-            stake[pid] = stake.get(pid, 0.0) + int(t["contracts"]) * float(t["price"])
-    n = len(closed_pids)
-    wins = sum(1 for p in closed_pids if realized.get(p, 0.0) > 0)
-    total_real = sum(realized.get(p, 0.0) for p in closed_pids)
-    total_stake = sum(stake.get(p, 0.0) for p in closed_pids)
-    return {
-        "n": n,
-        "win_rate": (wins / n) if n else 0.0,
-        "roi": (total_real / total_stake) if total_stake > 1e-9 else 0.0,
-        "realized": round(total_real, 2),
-        "realized_map": realized,
-    }
 
 
 # Auto-reload the whole page every N seconds so an unattended dashboard reflects
@@ -261,28 +208,25 @@ else:
 # Forward-test progress toward the edge-proven gate + notify status
 # --------------------------------------------------------------------------- #
 st.subheader("Forward-test progress (toward live)")
-from src.performance import compute_performance  # noqa: E402
+from src.performance import compute_performance, compute_closed_stats  # noqa: E402
 from src.live_gate import edge_proven  # noqa: E402
 
 perf = compute_performance(db, config)
 allowed, reason = edge_proven(db, config)
-_paper_trades = db.query("SELECT * FROM trades WHERE mode='paper' ORDER BY id")
-_closed_pids = [r["position_id"]
-                for r in db.query("SELECT position_id FROM positions WHERE status='closed'")]
-_cs = _closed_stats(_paper_trades, _closed_pids, config.starting_bankroll)
+_cs = compute_closed_stats(db, config)  # shared with the Discord daily summary
 _target = config.edge_proven_min_trades
 g1, g2, g3, g4 = st.columns(4)
 # Testing-phase view: stats are over CLOSED trades so the numbers move. The real
 # edge-proven gate still uses SETTLED trades underneath (shown in the banner).
-g1.metric("Closed trades", f"{_cs['n']}/{_target}")
-g2.metric("Win rate", f"{_cs['win_rate']*100:.1f}%")
-g3.metric("ROI", f"{_cs['roi']*100:+.1f}%")
+g1.metric("Closed trades", f"{_cs.n}/{_target}")
+g2.metric("Win rate", f"{_cs.win_rate*100:.1f}%")
+g3.metric("ROI", f"{_cs.roi*100:+.1f}%")
 g4.metric("Edge vs market",
           f"{perf.edge_vs_market:+.3f}" if perf.edge_vs_market is not None else "n/a")
-st.progress(min(1.0, _cs["n"] / max(1, _target)))
+st.progress(min(1.0, _cs.n / max(1, _target)))
 (st.success if allowed else st.warning)(
-    f"Edge-proven gate: {'PROVEN' if allowed else 'NOT YET'} — {_cs['n']}/{_target} closed, "
-    f"realized ${_cs['realized']:+.2f}. The real gate needs SETTLED outcomes "
+    f"Edge-proven gate: {'PROVEN' if allowed else 'NOT YET'} — {_cs.n}/{_target} closed, "
+    f"realized ${_cs.realized:+.2f}. The real gate needs SETTLED outcomes "
     f"({perf.n_settled} settled so far) and the model to beat the market.")
 
 webhook_set = bool((config.alert_webhook_url or "").strip())
@@ -327,7 +271,7 @@ with right:
         df_cp = pd.DataFrame(cp)
         # The stored realized_pnl is 0 for closed rows (not persisted on close);
         # reuse the realized-per-position map computed above for the stats panel.
-        df_cp["realized_pnl"] = df_cp["position_id"].map(_cs["realized_map"]).fillna(df_cp["realized_pnl"])
+        df_cp["realized_pnl"] = df_cp["position_id"].map(_cs.realized_by_position).fillna(df_cp["realized_pnl"])
         df_cp = _move_after_id(df_cp, "realized_pnl")
         _localize(df_cp, ["opened_ts", "closed_ts"])
         _show_colored(df_cp, _color_by_pnl("realized_pnl"))

@@ -80,10 +80,10 @@ class Service:
             # cycle `result` is pre-settle and was reporting stale, inconsistent equity).
             fresh = self.engine._summary(halted=False, markets_by_ticker={})
             from .live_gate import edge_proven
-            from .performance import compute_performance
-            perf = compute_performance(self.engine.db, self.config)
+            from .performance import compute_closed_stats
+            closed = compute_closed_stats(self.engine.db, self.config)
             gate = edge_proven(self.engine.db, self.config)
-            self.notifier.daily_summary(fresh, perf=perf, gate=gate)
+            self.notifier.daily_summary(fresh, closed=closed, gate=gate)
         except Exception as exc:  # pragma: no cover
             log.warning("Daily tasks failed: %s", exc)
             self.notifier.alert(f"daily tasks failed: {exc}")

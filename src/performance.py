@@ -111,6 +111,67 @@ def compute_performance(db, config, mode: str = "paper") -> Performance:
 
 
 # --------------------------------------------------------------------------- #
+# Closed-trade stats (testing-phase view) — counts CLOSED positions (early closes
+# AND settlements), distinct from the settled-only gate metrics above.
+# --------------------------------------------------------------------------- #
+@dataclass
+class ClosedStats:
+    n: int = 0
+    win_rate: float = 0.0
+    roi: float = 0.0
+    realized: float = 0.0
+    realized_by_position: Dict[str, float] = field(default_factory=dict)
+
+
+def realized_by_position(trades: List[dict], starting_bankroll: float) -> Dict[str, float]:
+    """Cumulative realized P&L per position_id, reconstructed from the trade log
+    (positions.realized_pnl isn't persisted on close, so we replay the trades)."""
+    from .position_manager import position_id
+    pm = PositionManager(starting_bankroll)
+    out: Dict[str, float] = {}
+    for t in trades:
+        a, tk, sd = t["action"], t["ticker"], t["side"]
+        c = int(t["contracts"]); pr = float(t["price"])
+        fee = float(t.get("fee") or 0.0); ts = t.get("ts", "")
+        tr = None
+        if a == "open":
+            pm.apply_open(tk, sd, c, pr, fee, "weather", ts)
+        elif a == "close":
+            tr = pm.apply_close(tk, sd, c, pr, fee, ts)
+        elif a == "settle":
+            tr = pm.apply_settle(tk, sd, outcome_yes=(pr >= 0.5), ts=ts)
+        if tr:
+            pid = position_id(tk, sd)
+            out[pid] = round(out.get(pid, 0.0) + tr["realized"], 4)
+    return out
+
+
+def compute_closed_stats(db, config, mode: str = "paper") -> ClosedStats:
+    """Win-rate / ROI / realized over CLOSED positions (closes AND settlements)."""
+    from .position_manager import position_id
+    trades = db.query("SELECT * FROM trades WHERE mode=? ORDER BY id", (mode,))
+    closed_pids = [r["position_id"] for r in db.query(
+        "SELECT position_id FROM positions WHERE status='closed' AND mode=?", (mode,))]
+    realized = realized_by_position(trades, config.starting_bankroll)
+    stake: Dict[str, float] = {}
+    for t in trades:
+        if t["action"] == "open":
+            pid = position_id(t["ticker"], t["side"])
+            stake[pid] = stake.get(pid, 0.0) + int(t["contracts"]) * float(t["price"])
+    n = len(closed_pids)
+    wins = sum(1 for p in closed_pids if realized.get(p, 0.0) > 0)
+    total_real = sum(realized.get(p, 0.0) for p in closed_pids)
+    total_stake = sum(stake.get(p, 0.0) for p in closed_pids)
+    return ClosedStats(
+        n=n,
+        win_rate=round(wins / n, 4) if n else 0.0,
+        roi=round(total_real / total_stake, 4) if total_stake > 1e-9 else 0.0,
+        realized=round(total_real, 2),
+        realized_by_position=realized,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Segment diagnostics — where does the model beat vs. lose to the market?
 # --------------------------------------------------------------------------- #
 def _replay_realized_by_ticker(trades, starting_bankroll):

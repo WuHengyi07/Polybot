@@ -49,20 +49,17 @@ def format_settlements(items: List[dict], realized_delta: Optional[float] = None
     return "\n".join(lines)
 
 
-def format_daily(result, perf=None, gate: Optional[Tuple[bool, str]] = None,
-                 min_trades: int = 150) -> str:
+def format_daily(result, closed=None, gate: Optional[Tuple[bool, str]] = None,
+                 target: int = 150) -> str:
     lines = [f"📊 daily: mode={result.mode} equity=${result.equity:.2f} "
              f"realized=${result.realized_pnl:.2f} open={result.open_positions} "
              f"drawdown={result.drawdown*100:.1f}%"]
-    if perf is not None:
-        lines.append(f"settled {perf.n_settled}/{min_trades}  win {perf.win_rate*100:.1f}%  "
-                     f"roi {perf.roi*100:+.1f}%")
-        if perf.edge_vs_market is not None:
-            lines.append(f"edge vs market {perf.edge_vs_market:+.3f} "
-                         f"(model {perf.brier_model} / market {perf.brier_market})")
+    if closed is not None:
+        lines.append(f"closed {closed.n}/{target}  win {closed.win_rate*100:.1f}%  "
+                     f"roi {closed.roi*100:+.1f}%  realized ${closed.realized:+.2f}")
     if gate is not None:
         allowed, reason = gate
-        lines.append(f"GATE: {'PROVEN' if allowed else 'not yet'} — {reason}")
+        lines.append(f"GATE (real money): {'PROVEN' if allowed else 'not yet'} — {reason}")
     return "\n".join(lines)
 
 
@@ -111,11 +108,11 @@ class Notifier:
             return
         self._post(format_settlements(items, realized_delta))
 
-    def daily_summary(self, result, perf=None, gate=None) -> None:
+    def daily_summary(self, result, closed=None, gate=None) -> None:
         if not self._enabled("summary"):
             return
-        min_trades = getattr(self.config, "edge_proven_min_trades", 150)
-        self._post(format_daily(result, perf=perf, gate=gate, min_trades=min_trades))
+        target = getattr(self.config, "edge_proven_min_trades", 150)
+        self._post(format_daily(result, closed=closed, gate=gate, target=target))
 
     def heartbeat(self, result) -> None:
         # logged every cycle, but not pushed to the webhook (avoid spam)
